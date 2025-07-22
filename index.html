@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor de PDF para Testeo Avanzado (Interfaz Elegante)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- Base & Dark Theme --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* bg-gray-900 */
+            color: #d1d5db; /* text-gray-300 */
+        }
+
+        /* --- Custom Card Styling --- */
+        .card {
+            background-color: #1f2937; /* bg-gray-800 */
+            border: 1px solid #374151; /* border-gray-700 */
+            border-radius: 1.5rem; /* rounded-2xl */
+            padding: 1.5rem; /* p-6 */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease-in-out;
+        }
+        .card:hover {
+            border-color: #4f46e5; /* indigo-600 */
+        }
+
+        /* --- Title Animation --- */
+        @keyframes gradient-animation {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .animated-title {
+            background: linear-gradient(90deg, #a78bfa, #4f46e5, #a78bfa);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradient-animation 4s ease infinite;
+        }
+
+        /* --- Button Styling & Animations --- */
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem; /* rounded-lg */
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: all 0.2s ease-in-out;
+            border: 2px solid transparent;
+            transform: scale(1);
+        }
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(79, 70, 229, 0.5);
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        .btn-primary {
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #6366f1; /* indigo-500 */
+        }
+        .btn-secondary {
+            background-color: #374151; /* gray-700 */
+            color: #d1d5db; /* gray-300 */
+        }
+        .btn-secondary:hover {
+            background-color: #4b5563; /* gray-600 */
+            color: white;
+        }
+        .btn-danger {
+            background-color: #be123c; /* rose-700 */
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #e11d48; /* rose-600 */
+        }
+        .btn-warning {
+            background-color: #d97706; /* amber-600 */
+            color: white;
+        }
+        .btn-warning:hover {
+            background-color: #f59e0b; /* amber-500 */
+        }
+
+        /* --- Active Mode Button --- */
+        .btn-active {
+            background-color: #a78bfa; /* violet-400 */
+            color: #111827; /* gray-900 */
+            box-shadow: 0 0 0 2px #1f2937, 0 0 0 4px #a78bfa;
+        }
+        
+        /* --- Canvas Container (CORRECTED) --- */
+        /* This new wrapper handles the black background and padding */
+        #canvas-wrapper {
+            background-color: #000000;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px dashed #4b5563; /* gray-600 */
+            width: fit-content;
+            margin: auto;
+        }
+        /* This container is now ONLY for positioning, no padding! */
+        #pdf-container {
+            position: relative;
+        }
+        #drawing-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+        }
+        .cursor-draw { cursor: crosshair; }
+        .cursor-text { cursor: text; }
+
+        /* --- Loading Spinner --- */
+        .btn-loading { background-color: #4b5563; cursor: not-allowed; opacity: 0.7; }
+    </style>
+</head>
+<body>
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold animated-title">Herramienta de Testeo y Gestión de PDF</h1>
+            <p class="text-lg text-gray-400 mt-4">Edita, estampa leyendas, y divide tus documentos PDF con precisión garantizada.</p>
+        </header>
+
+        <div class="card mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-white">1. Cargar Archivo PDF</h2>
+            <div class="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center">
+                <input type="file" id="pdf-upload" class="hidden" accept="application/pdf">
+                <label for="pdf-upload" class="btn btn-primary cursor-pointer inline-block">
+                    Seleccionar PDF
+                </label>
+                <p id="file-name" class="mt-4 text-gray-500">Ningún archivo seleccionado.</p>
+            </div>
+        </div>
+
+        <div id="editor-section" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div class="card lg:col-span-1">
+                    <h2 class="text-xl font-semibold mb-4 text-white">2. Navegación</h2>
+                    <div class="flex justify-between items-center">
+                        <button id="prev-page" class="btn btn-secondary">Anterior</button>
+                        <span id="page-indicator" class="font-medium text-lg">Página <span id="page-num"></span> de <span id="page-count"></span></span>
+                        <button id="next-page" class="btn btn-secondary">Siguiente</button>
+                    </div>
+                </div>
+                <div class="card lg:col-span-2">
+                    <h2 class="text-xl font-semibold mb-4 text-white">3. Modo de Edición</h2>
+                    <div class="flex flex-wrap justify-center items-center gap-4">
+                        <button id="mode-draw" class="btn btn-secondary">Tapar Información</button>
+                        <button id="mode-legend" class="btn btn-secondary">Colocar Leyenda</button>
+                        <div class="flex items-center gap-2 ml-4">
+                            <label for="data-count-input" class="text-sm font-medium text-gray-400">Datos ocultos:</label>
+                            <input type="number" id="data-count-input" value="1" min="0" class="w-20 rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-center">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-6">
+                <h2 class="text-xl font-semibold mb-4 text-white">4. Lienzo de Edición</h2>
+                <!-- HTML Structure Correction -->
+                <div id="canvas-wrapper">
+                    <div id="pdf-container">
+                        <canvas id="pdf-canvas"></canvas>
+                        <canvas id="drawing-canvas"></canvas>
+                    </div>
+                </div>
+                <p id="editor-tip" class="mt-4 text-center text-sm text-gray-500"></p>
+            </div>
+
+            <div class="card mb-6">
+                 <h2 class="text-xl font-semibold mb-4 text-white">5. Acciones</h2>
+                 <div class="flex flex-wrap justify-center gap-4">
+                    <button id="undo-btn" class="btn btn-warning">Deshacer Última Acción</button>
+                    <button id="clear-all" class="btn btn-danger">Limpiar Página Actual</button>
+                 </div>
+            </div>
+
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-4 text-white">6. Descargar</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="flex flex-col items-center p-4 border border-gray-700 rounded-xl">
+                        <h3 class="font-semibold mb-3 text-lg">Opción A: Unir todo</h3>
+                        <button id="download-pdf-btn" class="w-full btn btn-primary">Descargar PDF Completo</button>
+                    </div>
+                    <div class="flex flex-col items-center p-4 border border-gray-700 rounded-xl">
+                        <h3 class="font-semibold mb-3 text-lg">Opción B: Dividir por rangos</h3>
+                        <input type="text" id="split-ranges" placeholder="Ej: 1-2, 3, 5-7" class="w-full text-center bg-gray-700 border-gray-600 rounded-md shadow-sm mb-3 p-2 text-white">
+                        <button id="split-download-btn" class="w-full btn btn-primary">Dividir y Descargar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- SETUP ---
+        window.jsPDF = window.jspdf.jsPDF;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
+
+        const pdfUpload = document.getElementById('pdf-upload'), fileName = document.getElementById('file-name'), editorSection = document.getElementById('editor-section');
+        const pdfCanvas = document.getElementById('pdf-canvas'), drawingCanvas = document.getElementById('drawing-canvas');
+        const prevPageBtn = document.getElementById('prev-page'), nextPageBtn = document.getElementById('next-page');
+        const pageNumSpan = document.getElementById('page-num'), pageCountSpan = document.getElementById('page-count');
+        const downloadPdfBtn = document.getElementById('download-pdf-btn'), undoBtn = document.getElementById('undo-btn'), clearAllBtn = document.getElementById('clear-all');
+        const modeDrawBtn = document.getElementById('mode-draw'), modeLegendBtn = document.getElementById('mode-legend');
+        const dataCountInput = document.getElementById('data-count-input'), editorTip = document.getElementById('editor-tip');
+        const splitRangesInput = document.getElementById('split-ranges'), splitDownloadBtn = document.getElementById('split-download-btn');
+
+        let pdfDoc = null, pageNum = 1, pageRendering = false, pageNumPending = null, scale = 1.5;
+        let actions = []; 
+        let isDrawing = false, startX, startY;
+        let editorMode = 'draw';
+        
+        const pdfCtx = pdfCanvas.getContext('2d'), drawingCtx = drawingCanvas.getContext('2d');
+
+        // --- LEYENDA ---
+        function getLegendStructure(count) {
+            return [
+                { text: 'SISTEMA DE PORTALES DE OBLIGACIONES DE TRANSPARENCIA (SIPOT)', bold: true, newLine: true },
+                { text: 'Información Confidencial', bold: false, newLine: true }, { text: '', bold: false, newLine: true },
+                { text: 'Eliminado: ', bold: true }, { text: `${count} datos personales. `, bold: false },
+                { text: 'Resolución del Comité: ', bold: true }, { text: 'Resolución CT/ALIMENTACIÓN/021/2025 ', bold: false },
+                { text: 'Fecha de la Resolución del Comité de Transparencia: ', bold: true }, { text: '31/07/2025.', bold: false, underline: true, newLine: true },
+                { text: 'Nombre del Área: ', bold: true }, { text: 'Gerencia Regional Occidente', bold: false, newLine: true },
+                { text: 'Motivación: ', bold: true }, { text: 'Se elaboró versión pública por contener datos personales concernientes a una persona física identificada o identificable, a fin de dar cumplimiento a las obligaciones de transparencia.', bold: false, newLine: true },
+                { text: 'Fundamentación: ', bold: true }, { text: 'Artículos 103 fracción III, 115 y 120 de la Ley General de Transparencia y Acceso a la Información Pública y capítulo IX de los Lineamientos Generales en materia de Clasificación y Desclasificación de la Información, así como para la elaboración de versiones públicas vigentes.', bold: false, newLine: true },
+                { text: 'Datos testados: ', bold: true }, { text: 'Los censurados en la presente foja.', bold: false, newLine: true },
+                { text: 'Personas o instancias autorizadas a acceder a la información: ', bold: true }, { text: 'Personas Titulares de Área y aquellas que resguardan la información.', bold: false, newLine: true }
+            ];
+        }
+
+        function renderRichTextInBox(ctx, textStructure, rect) {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+            const FONT_SIZE = 9, LINE_HEIGHT = 11;
+            ctx.fillStyle = 'black';
+            let currentX = rect.x + 5, currentY = rect.y + FONT_SIZE + 2;
+            textStructure.forEach(segment => {
+                const fontStyle = segment.bold ? 'bold' : 'normal';
+                ctx.font = `${fontStyle} ${FONT_SIZE}px Arial`;
+                const words = segment.text.split(' ');
+                words.forEach(word => {
+                    const wordWithSpace = word + ' ';
+                    const metrics = ctx.measureText(wordWithSpace);
+                    if (currentX + metrics.width > rect.x + rect.width - 5) { currentX = rect.x + 5; currentY += LINE_HEIGHT; }
+                    ctx.fillText(wordWithSpace, currentX, currentY);
+                    if (segment.underline) {
+                        const underlineY = currentY + 2;
+                        ctx.beginPath(); ctx.moveTo(currentX, underlineY); ctx.lineTo(currentX + metrics.width, underlineY);
+                        ctx.strokeStyle = 'black'; ctx.lineWidth = 0.5; ctx.stroke();
+                    }
+                    currentX += metrics.width;
+                });
+                if (segment.newLine) { currentX = rect.x + 5; currentY += LINE_HEIGHT; }
+            });
+        }
+        
+        // --- RENDERIZADO DE PÁGINAS (UI) ---
+        const setEditorMode = (mode) => {
+            editorMode = mode;
+            modeDrawBtn.classList.toggle('btn-active', mode === 'draw');
+            modeLegendBtn.classList.toggle('btn-active', mode === 'legend');
+            editorTip.textContent = mode === 'draw' ? "Modo 'Tapar Información': Haz clic y arrastra para ocultar datos." : "Modo 'Colocar Leyenda': Dibuja un recuadro donde quieras estampar la leyenda.";
+        };
+
+        const redrawAll = () => {
+            drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            const pageActions = actions[pageNum - 1] || [];
+            pageActions.forEach(action => {
+                if (action.type === 'rect') {
+                    drawingCtx.fillStyle = 'black';
+                    drawingCtx.fillRect(action.rect.x, action.rect.y, action.rect.width, action.rect.height);
+                } else if (action.type === 'legend') {
+                    renderRichTextInBox(drawingCtx, action.textStructure, action.rect);
+                    drawingCtx.strokeStyle = '#a78bfa'; /* violet-400 */
+                    drawingCtx.lineWidth = 2;
+                    drawingCtx.strokeRect(action.rect.x, action.rect.y, action.rect.width, action.rect.height);
+                }
+            });
+        };
+        
+        const renderPage = async (num) => {
+            if (!pdfDoc) return;
+            pageRendering = true;
+            try {
+                const page = await pdfDoc.getPage(num);
+                const viewport = page.getViewport({ scale });
+                
+                // NO MORE JS POSITIONING - CSS handles everything now
+                [pdfCanvas, drawingCanvas].forEach(c => { c.height = viewport.height; c.width = viewport.width; });
+                
+                await page.render({ canvasContext: pdfCtx, viewport }).promise;
+                pageNumSpan.textContent = num;
+                redrawAll();
+            } catch (error) {
+                console.error(`Error al renderizar la página ${num}:`, error);
+                fileName.textContent = `Error al renderizar la página ${num}.`;
+            } finally {
+                pageRendering = false;
+                if (pageNumPending !== null) { 
+                    const pending = pageNumPending;
+                    pageNumPending = null;
+                    queueRenderPage(pending); 
+                }
+            }
+        };
+
+        const queueRenderPage = (num) => { if (pageRendering) pageNumPending = num; else renderPage(num); };
+        const onPrevPage = () => { if (!pdfDoc || pageNum <= 1) return; pageNum--; queueRenderPage(pageNum); };
+        const onNextPage = () => { if (!pdfDoc || pageNum >= pdfDoc.numPages) return; pageNum++; queueRenderPage(pageNum); };
+
+        // --- MANEJO DE ARCHIVO Y EVENTOS DE DIBUJO (UI) ---
+        const handlePdfUpload = async (e) => {
+            const file = e.target.files[0];
+            if (!file || file.type !== 'application/pdf') return;
+            pdfDoc = null; actions = []; pageNum = 1;
+            fileName.textContent = `Cargando "${file.name}"...`;
+            editorSection.classList.add('hidden');
+            const fileReader = new FileReader();
+            fileReader.onload = async (event) => {
+                const typedarray = new Uint8Array(event.target.result);
+                try {
+                    pdfDoc = await pdfjsLib.getDocument(typedarray).promise;
+                    pageCountSpan.textContent = pdfDoc.numPages;
+                    actions = Array.from({ length: pdfDoc.numPages }, () => []);
+                    pageNum = 1; 
+                    editorSection.classList.remove('hidden');
+                    fileName.textContent = file.name;
+                    await renderPage(pageNum); 
+                    setEditorMode('draw');
+                } catch (error) {
+                    console.error("Error al cargar el PDF:", error);
+                    editorSection.classList.add('hidden');
+                    fileName.textContent = `Error al cargar: ${file.name}. Puede estar dañado o protegido.`;
+                    pdfDoc = null;
+                }
+            };
+            fileReader.readAsArrayBuffer(file);
+        };
+
+        const startDrawing = (e) => {
+            if (!pdfDoc) return;
+            isDrawing = true;
+            const rect = drawingCanvas.getBoundingClientRect();
+            startX = e.clientX - rect.left; startY = e.clientY - rect.top;
+        };
+
+        const draw = (e) => {
+            if (!isDrawing) return;
+            const rect = drawingCanvas.getBoundingClientRect();
+            const currentX = e.clientX - rect.left, currentY = e.clientY - rect.top;
+            const width = currentX - startX, height = currentY - startY;
+            redrawAll();
+            drawingCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            drawingCtx.strokeStyle = '#a78bfa'; /* violet-400 */
+            drawingCtx.lineWidth = 2;
+            if (editorMode === 'draw') drawingCtx.fillRect(startX, startY, width, height);
+            else drawingCtx.strokeRect(startX, startY, width, height);
+        };
+        
+        const stopDrawing = (e) => {
+            if (!isDrawing) return;
+            isDrawing = false;
+            const rect = drawingCanvas.getBoundingClientRect();
+            const endX = e.clientX - rect.left, endY = e.clientY - rect.top;
+            const newRect = { x: Math.min(startX, endX), y: Math.min(startY, endY), width: Math.abs(endX - startX), height: Math.abs(endY - startY) };
+            if (newRect.width < 10 || newRect.height < 10) { redrawAll(); return; }
+            const pageActions = actions[pageNum - 1];
+            if (editorMode === 'draw') {
+                pageActions.push({ type: 'rect', rect: newRect });
+            } else {
+                const count = dataCountInput.value || 0;
+                pageActions.push({ type: 'legend', rect: newRect, textStructure: getLegendStructure(count) });
+            }
+            redrawAll();
+        };
+
+        const undoLastAction = () => {
+            const pageActions = actions[pageNum - 1];
+            if (pageActions && pageActions.length > 0) { pageActions.pop(); redrawAll(); }
+        };
+
+        const clearAllActions = () => { actions[pageNum - 1] = []; redrawAll(); };
+
+        // --- LÓGICA DE EXPORTACIÓN (SOLUCIÓN DEFINITIVA) ---
+        const setButtonLoading = (btn, isLoading, text) => {
+            btn.disabled = isLoading;
+            btn.classList.toggle('btn-loading', isLoading);
+            if (isLoading) {
+                btn.innerHTML = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${text}...`;
+            } else {
+                btn.textContent = text;
+            }
+        };
+        
+        async function createIsolatedPageSnapshot(pageNumber) {
+            const page = await pdfDoc.getPage(pageNumber);
+            const viewport = page.getViewport({ scale });
+            const tempPdfCanvas = document.createElement('canvas');
+            const tempPdfCtx = tempPdfCanvas.getContext('2d');
+            tempPdfCanvas.width = viewport.width;
+            tempPdfCanvas.height = viewport.height;
+            await page.render({ canvasContext: tempPdfCtx, viewport }).promise;
+            const pageActions = actions[pageNumber - 1] || [];
+            pageActions.forEach(action => {
+                if (action.type === 'rect') {
+                    tempPdfCtx.fillStyle = 'black';
+                    tempPdfCtx.fillRect(action.rect.x, action.rect.y, action.rect.width, action.rect.height);
+                } else if (action.type === 'legend') {
+                    renderRichTextInBox(tempPdfCtx, action.textStructure, action.rect);
+                }
+            });
+            return tempPdfCanvas.toDataURL('image/png');
+        }
+
+        const generatePdfFromPages = async (pageNumbers, outputFileName) => {
+            if (!pdfDoc || pageNumbers.length === 0) return;
+            
+            const firstPage = await pdfDoc.getPage(pageNumbers[0]);
+            const firstPageViewport = firstPage.getViewport({ scale });
+            const pdf = new jsPDF({ 
+                orientation: firstPageViewport.width > firstPageViewport.height ? 'l' : 'p', 
+                unit: 'pt', 
+                format: [firstPageViewport.width, firstPageViewport.height] 
+            });
+
+            for (let i = 0; i < pageNumbers.length; i++) {
+                const currentPageNum = pageNumbers[i];
+                const page = await pdfDoc.getPage(currentPageNum);
+                const pageViewport = page.getViewport({ scale });
+
+                if (i > 0) {
+                    pdf.addPage([pageViewport.width, pageViewport.height], pageViewport.width > pageViewport.height ? 'l' : 'p');
+                }
+                
+                const imgData = await createIsolatedPageSnapshot(currentPageNum);
+                
+                pdf.addImage(imgData, 'PNG', 0, 0, pageViewport.width, pageViewport.height);
+            }
+            
+            pdf.save(outputFileName);
+        };
+
+        const downloadFullPDF = async () => {
+            setButtonLoading(downloadPdfBtn, true, 'Generando');
+            const allPages = Array.from({ length: pdfDoc.numPages }, (_, i) => i + 1);
+            await generatePdfFromPages(allPages, 'documento_completo_modificado.pdf');
+            setButtonLoading(downloadPdfBtn, false, 'Descargar PDF Completo');
+        };
+
+        const parseRanges = (rangeString) => {
+            const groups = [];
+            const parts = rangeString.split(',');
+            for (const part of parts) {
+                const trimmedPart = part.trim();
+                if (trimmedPart.includes('-')) {
+                    const [start, end] = trimmedPart.split('-').map(Number);
+                    if (!isNaN(start) && !isNaN(end) && start <= end) {
+                        const range = [];
+                        for (let i = start; i <= end; i++) {
+                            if (pdfDoc && i > 0 && i <= pdfDoc.numPages) range.push(i);
+                        }
+                        if (range.length > 0) groups.push(range);
+                    }
+                } else {
+                    const num = Number(trimmedPart);
+                    if (pdfDoc && !isNaN(num) && num > 0 && num <= pdfDoc.numPages) groups.push([num]);
+                }
+            }
+            return groups;
+        };
+
+        const splitAndDownload = async () => {
+            const ranges = splitRangesInput.value;
+            if (!ranges) return; 
+            const pageGroups = parseRanges(ranges);
+            if (pageGroups.length === 0) return; 
+            
+            setButtonLoading(splitDownloadBtn, true, 'Dividiendo');
+            for (const group of pageGroups) {
+                const start = group[0];
+                const end = group[group.length - 1];
+                const fileName = `documento_paginas_${start === end ? start : `${start}-${end}`}.pdf`;
+                await generatePdfFromPages(group, fileName);
+            }
+            setButtonLoading(splitDownloadBtn, false, 'Dividir y Descargar');
+        };
+
+        // --- EVENT LISTENERS ---
+        pdfUpload.addEventListener('change', handlePdfUpload);
+        prevPageBtn.addEventListener('click', onPrevPage);
+        nextPageBtn.addEventListener('click', onNextPage);
+        modeDrawBtn.addEventListener('click', () => setEditorMode('draw'));
+        modeLegendBtn.addEventListener('click', () => setEditorMode('legend'));
+        undoBtn.addEventListener('click', undoLastAction);
+        clearAllBtn.addEventListener('click', clearAllActions);
+        downloadPdfBtn.addEventListener('click', downloadFullPDF);
+        splitDownloadBtn.addEventListener('click', splitAndDownload);
+        
+        drawingCanvas.addEventListener('mousedown', startDrawing);
+        drawingCanvas.addEventListener('mousemove', draw);
+        drawingCanvas.addEventListener('mouseup', stopDrawing);
+        drawingCanvas.addEventListener('mouseout', () => { if (isDrawing) { isDrawing = false; redrawAll(); }});
+    </script>
+</body>
+</html>
